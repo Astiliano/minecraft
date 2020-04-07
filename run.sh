@@ -20,6 +20,10 @@ background() {
 	echo "${?}" > ${pid_file}.${pid}
 }
 
+pid_file_cleanup() {
+    rm ${pid_file:-rm_safeguard}* &>/dev/null # Cleanup any old pid files both main and sub.
+}
+
 # Required format: type (long/short) exit on error (exit/noexit) $command_to_run
 # Example: echo_and_run -l -ne sleep 10
 # Example: echo_and_run --long --noexit sleep 10
@@ -71,7 +75,7 @@ echo_and_run() {
     fi
 
     if [[ "${type}" = "long" ]]; then
-        rm ${pid_file}* &>/dev/null # Cleanup any old pid files both main and sub.
+        pid_file_cleanup
         background &
         pid=$(grep "${cmd}" "${pid_file}" | awk '{print $1}')
 
@@ -94,6 +98,7 @@ echo_and_run() {
 
         # Once it's past checking for pid file, (d) will be added to line.
         result=$(cat ${pid_file}.${pid})
+		pid_file_cleanup
         case "${result}" in
         0) 
             echo -e "\r${text}(d): OK"
@@ -108,7 +113,6 @@ echo_and_run() {
             err "Invalid status grabbed: ${result}"
             ;;
         esac
-        rm ${pid_file}*
     fi
 }
 
