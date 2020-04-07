@@ -63,7 +63,7 @@ echo_and_run() {
 
 	export cmd="${*}"
     if [[ "${type}" = "short" ]]; then
-        echo -en "\t[!] Running '${*}': "
+        echo -en "- [!] Running '${*}': "
         if ${cmd} &>/dev/null ; then
             echo "OK"
             return 0
@@ -80,7 +80,7 @@ echo_and_run() {
         pid=$(grep "${cmd}" "${pid_file}" | awk '{print $1}')
 
         # While waiting for command to exit, (c) will be added to line.
-        text="[!] Running ${*} :"
+        text="- [!] Running ${*} :"
         while kill -0 "${pid}" &>/dev/null; do
             for state in '|' '/' '-' '\';do
                 echo -ne "\r${text}(c): ${state}"
