@@ -64,7 +64,7 @@ echo_and_run() {
 	export cmd="${*}"
     if [[ "${type}" = "short" ]]; then
         echo -en "\t[!] Running '${*}': "
-        if ${cmd} 1>/dev/null ; then
+        if ${cmd} &>/dev/null ; then
             echo "OK"
             return 0
         else
