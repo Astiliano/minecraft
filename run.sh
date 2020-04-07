@@ -43,7 +43,7 @@ echo_and_run() {
         shift
         ;;
     *)
-        err: "${@} - Specify (-l) long or (-s) short : echo_and_run --(long/short) --(exit/noexit) command"
+        err "${@} - Specify (-l) long or (-s) short : echo_and_run --(long/short) --(exit/noexit) command"
         ;;
     esac 
 
@@ -57,7 +57,7 @@ echo_and_run() {
             shift
             ;;
         *)
-            err: "${@} - Specify (-e) exit or (-ne) no exit : echo_and_run --(long/short) --(exit/noexit) command"
+            err "${@} - Specify (-e) exit or (-ne) no exit : echo_and_run --(long/short) --(exit/noexit) command"
             ;;
     esac 
 
