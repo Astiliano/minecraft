@@ -71,11 +71,11 @@ echo_and_run() {
         done
 
         echo -ne "\r${text}(s): -" # While waiting for pid status, '(s): -' will be added to line.
-        if wait "${pid}"; then 
+        if wait "${pid}"; then  # Get exit status of PID
                 echo -e "\r${text}(d): OK"
         else
                 echo -e "\r${text}(d): FAIL"
-                if [[ "${exit}" = "yes" ]]; then err "Check command ${cmd}";fi
+                if [[ "${exit}" = "yes" ]]; then err "Check command ${cmd}";fi # Did user want script to exit if it failed
                 err "Invalid status grabbed: ${result}"
         fi
     fi
@@ -86,26 +86,24 @@ agree_eula() { # eula.txt requires `eula=false` be changed to `eula=true` for se
     echo -e "[!] CONFIRMATION REQUIRED (One Time Only) :::\n"\
     "By typing 'I AGREE' you are indicating your agreement to our EULA (https://account.mojang.com"\
     "/documents/minecraft_eula)"
-    until [[ $(grep "eula=true" "${eula_file}") ]]; do
+    until grep "eula=TRUE" "${eula_file}" &> /dev/null; do
         read -p "[!] Type 'I AGREE' or press CTRL+C to exit: " eula
         if [[ "${eula}" = "I AGREE" ]]; then
-        sed -i 's/eula=false/eula=true/g' "${eula_file}"
+        sed -ir 's/^eula=\w\+/eula=TRUE/g' "${eula_file}"
         fi
     done
 }
 
 check_eula() {
-    eula_file="${main_dir}/${version}/eula.txt"
+    export eula_file="${main_dir}/${version}/eula.txt"
     echo -n "[!] Checking if ${eula_file} exists: "
     if [[ -f "${eula_file}" ]]; then
         echo "OK"
         echo -n "[!] Checking if eula has been signed: "
-        if grep "eula=true" "${eula_file}" ; then
+        if grep "eula=TRUE" "${eula_file}" &> /dev/null; then
             echo "OK"
         else
-            if [[ "${pass}" -gt 2 ]]; then
-                err "Eula sign check is looping"
-            fi
+            if [[ "${pass}" -gt 2 ]]; then err "Eula sign check is looping";fi # Max allow 3 tries
             pass=$(expr "${pass}" + 1)
             echo "FAIL"
             agree_eula
@@ -136,18 +134,21 @@ server_status() {
 }
 
 server_start() {
-    if installed_servers=( $(find ~/minecraft_servers -maxdepth 2 -regex ".*\.jar" | grep -v installer | grep jar) ); then
+    if installed_servers=( $(find "${main_dir}" -maxdepth 2 -regex ".*\.jar" | grep -v installer | grep jar) ); then
         echo "[!] Select server to start (Forge = Mods / minecraft_server = Vanilla;no mods)"
         select run_server_version in "${installed_servers[@]}"; do 
             if [[ "${REPLY}" -gt "${#installed_servers[@]}" ]]; then
                 echo "[!] WARN : Please make a proper selection."
             else
                 echo "[!] Selected Installed Server: ${run_server_version}"
+                esc_main_dir=$(<<< "${main_dir}" sed 's/\//\\\//g')
+                server_version=$(<<< "${run_server_version}" sed "s/${esc_main_dir}//g" | cut -d'/' -f2)
+                break
             fi
         done
     fi
-
-    echo screen -dmS minecraft_server java -Xms1024m -Xmx3072m -jar ~/minecraft_server/server.jar nogui
+    echo "$dir"
+    # screen -dmS minecraft_server java -Xms1024m -Xmx3072m -jar "${run_server_version}" nogui
 }
 
 server_stop() {
