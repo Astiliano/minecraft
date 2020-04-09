@@ -95,7 +95,6 @@ agree_eula() { # eula.txt requires `eula=false` be changed to `eula=true` for se
 }
 
 check_eula() {
-    export eula_file="${main_dir}/${version}/eula.txt"
     echo -n "[!] Checking if ${eula_file} exists: "
     if [[ -f "${eula_file}" ]]; then
         echo "OK"
@@ -115,23 +114,90 @@ check_eula() {
             err "Eula not found even after attempting to startup the server"
         fi
         
-        echo "[!] In order to create eula, will startup the server onces (don't worry it 'should' immediately close because of unsigned eula)"
+        echo "[!] In order to create eula, will startup the server once (don't worry it 'should' immediately close because of unsigned eula)"
         echo_and_run --long --exit java -Xms512M -Xmx3G -jar "forge-${version}-${build}.jar" nogui
         check_eula
     fi
 }
 
 server_status() {
-    echo -n "[!] Checking for running servers: "
-    if server_running_check=$(ps aux &>/dev/stdout| grep -P "java.*\-jar.*\.jar" | grep -ivP "grep.*java" | grep java); then
-        echo "FOUND"
-        echo -e "----------------\n${server_running_check}"
+    installed_servers=$( find "${main_dir}" -maxdepth 2 -regex ".*\.jar" | grep -v installer )
+    installed_dirs=( $(<<< "${installed_servers}" grep -oP "/.*/" | uniq) )
+    echo -e "\n ======== Installed Servers ========\n"
+    for dir in "${installed_dirs[@]}"; do
+        echo "[!] ${dir}"
+        eula_file="${dir}/eula.txt"
+        echo_and_run --short --exit cd "${dir}" > /dev/null
+        for jar in $(echo "${installed_servers}" | grep "${dir}" | sed 's,\/.*\/,,g'); do
+            if ps aux &>/dev/null | grep -P "jar.*\-jar.*${jar}" ; then
+                srv_status="Running"
+            else
+                srv_status="Not Running"
+            fi
+            printf "\t%-30s %-5s %-15s\n" "$jar" ':::' "${srv_status}"
+        done
+        echo
+        check_eula
+        check_log
+    done
+}
+
+_load_eula() {
+    echo -ne "\t[!] eula.txt file load: "
+    if grep "Failed to load eula.txt" "${log_file}"&>/dev/null; then 
+        echo "FAIL"
+        return 1
+    else
+        echo "OK"
+        return 0
+    fi
+}
+
+_spawn_start() {
+    echo -ne "\t[!] Preparing spawn area check: "
+    if grep "Preparing spawn area:" "${log_file}" &>/dev/null; then 
+        echo "OK"
         return 0
     else
-        echo -e "NONE FOUND\n${server_running_check}" # Should be an empty variable, but just incase.
+        echo "FAIL"
         return 1
     fi
 }
+
+_spawn_complete() {
+    echo -ne "\t[!] Area spawn completion check: "
+    if grep "Time elapsed:" "${log_file}"&>/dev/null; then 
+        echo "OK"
+        return 0
+    else
+        echo "FAIL"
+        return 1
+    fi
+}
+
+_server_stop() {
+        echo -ne "\t[!] Checking log for stopped server: "
+        if grep "Stopping server" "${log_file}"&>/dev/null; then 
+            echo "FAIL"
+        else
+            echo "OK"
+        fi
+}
+
+check_log() {
+    log_file="${dir}logs/latest.log"
+    echo -e "\n[!] Log check for: ${log_file}\n-----------------------------"
+    
+    _load_eula
+    _spawn_start
+    _spawn_complete
+    _server_stop
+    
+    echo -e "\n[!] Last 5 entries\n-----------------------------"
+    tail -5 "${log_file}"
+    echo -e "\n\n\n"
+}
+
 
 server_start() {
     if installed_servers=( $(find "${main_dir}" -maxdepth 2 -regex ".*\.jar" | grep -v installer | grep jar) ); then
@@ -147,8 +213,63 @@ server_start() {
             fi
         done
     fi
-    echo "$dir"
-    # screen -dmS minecraft_server java -Xms1024m -Xmx3072m -jar "${run_server_version}" nogui
+    echo_and_run --short --exit cd "${main_dir}/${server_version}"
+
+    if screen -ls | grep "minecraft_${server_version}" &> /dev/null; then
+        err Screen session exists for that server, type \'screen -x minecraft_${server_version}\' to connect to it.
+    fi
+
+    echo "[!] Starting server in screen as: minecraft_${server_version}"
+    screen -dmS "minecraft_${server_version}" java -Xms1024m -Xmx3072m -jar "${run_server_version}" nogui
+
+    sleep 5
+    echo -e "\n[!] Checking server startup process\n--------------"
+    
+    log_file="${main_dir}/${server_version}/logs/latest.log"
+
+    text="[!]Starting Minecraft Server"
+    SECONDS=0
+    TIMEOUT=60
+    until grep "Starting minecraft server" "${log_file}" &>/dev/null; do
+        if [[ "${SECONDS}" -gt "${TIMEOUT}" ]]; then
+            err Server took too long to start
+        fi
+        for state in '|' '/' '-' '\';do
+            echo -ne "\r${text} : ${state}"
+            sleep 0.25
+        done
+    done
+     echo -e "\r${text} : OK"
+
+    text="[!]Preparing Level"
+    SECONDS=0
+    TIMEOUT=60
+    echo -n "${text}"
+    until grep "Preparing level" "${log_file}" &>/dev/null; do
+        if [[ "${SECONDS}" -gt "${TIMEOUT}" ]]; then
+            err Server took too long to reach \'Preparing Level\'
+        fi
+        for state in '|' '/' '-' '\';do
+            echo -ne "\r${text} : ${state}"
+            sleep 0.25
+        done
+    done
+    echo -e "\r${text} : OK"
+
+    text="[!]Preparing Spawn Area: Complete "
+    SECONDS=0
+    TIMEOUT=180
+    echo -n "[!] Preparing Spawn Area"
+    until grep "Time elapsed:" "${log_file}" &>/dev/null; do
+        if [[ "${SECONDS}" -gt "${TIMEOUT}" ]]; then
+            err Server took too long to complete \'Preparing Spawn Area\'
+        fi
+        for state in '|' '/' '-' '\';do
+            echo -ne "\r[!]$(grep "Preparing spawn area" "${log_file}" | grep -oP "Preparing spawn area:.*%" | tail -1)"
+            sleep 0.25
+        done
+    done
+    echo -e "\r${text}"
 }
 
 server_stop() {
@@ -221,6 +342,7 @@ main() {
         read -p "[!] Is this correct? (yes/no): " proceed
     done
 
+    eula_file="${main_dir}/${version}/eula.txt"
     echo -n "[!] Checking if ${main_dir}/${version} directory exists: "
     if [[ -d "${main_dir}/${version}" ]]; then
         echo "OK"
