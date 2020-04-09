@@ -73,10 +73,11 @@ echo_and_run() {
         echo -ne "\r${text}(s): -" # While waiting for pid status, '(s): -' will be added to line.
         if wait "${pid}"; then  # Get exit status of PID
                 echo -e "\r${text}(d): OK"
+                return 0
         else
                 echo -e "\r${text}(d): FAIL"
                 if [[ "${exit}" = "yes" ]]; then err "Check command ${cmd}";fi # Did user want script to exit if it failed
-                err "Invalid status grabbed: ${result}"
+                return 1
         fi
     fi
 }
