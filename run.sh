@@ -277,6 +277,10 @@ server_stop() {
     echo "boop"
 }
 
+install_setup_sftp() {
+    # Placeholder
+}
+
 main() {
     echo -n "[!] Verify Debian Distro: "
     if [[ $(cat /proc/version) =~ "debian"  ]]; then 
