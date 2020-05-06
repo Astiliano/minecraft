@@ -64,7 +64,7 @@ echo_and_run() {
 
         text="- [!] Running ${*} :" # While waiting for command to exit, (c) will be added to line.
         while kill -0 "${pid}" &>/dev/null; do
-            for state in '|' '/' '-' '\';do
+            for state in '|' '/' '-' \\;do
                 echo -ne "\r${text}(c): ${state}"
                 sleep 0.25
             done
@@ -235,7 +235,7 @@ server_start() {
         if [[ "${SECONDS}" -gt "${TIMEOUT}" ]]; then
             err Server took too long to start
         fi
-        for state in '|' '/' '-' '\';do
+        for state in '|' '/' '-' \\;do
             echo -ne "\r${text} : ${state}"
             sleep 0.25
         done
@@ -250,7 +250,7 @@ server_start() {
         if [[ "${SECONDS}" -gt "${TIMEOUT}" ]]; then
             err Server took too long to reach \'Preparing Level\'
         fi
-        for state in '|' '/' '-' '\';do
+        for state in '|' '/' '-' \\;do
             echo -ne "\r${text} : ${state}"
             sleep 0.25
         done
@@ -265,7 +265,7 @@ server_start() {
         if [[ "${SECONDS}" -gt "${TIMEOUT}" ]]; then
             err Server took too long to complete \'Preparing Spawn Area\'
         fi
-        for state in '|' '/' '-' '\';do
+        for state in '|' '/' '-' \\;do
             echo -ne "\r[!]$(grep "Preparing spawn area" "${log_file}" | grep -oP "Preparing spawn area:.*%" | tail -1)"
             sleep 0.25
         done
