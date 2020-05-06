@@ -82,7 +82,6 @@ echo_and_run() {
     fi
 }
 
-
 agree_eula() { # eula.txt requires `eula=false` be changed to `eula=true` for server to run.
     echo -e "[!] CONFIRMATION REQUIRED (One Time Only) :::\n"\
     "By typing 'I AGREE' you are indicating your agreement to our EULA (https://account.mojang.com"\
@@ -104,7 +103,7 @@ check_eula() {
             echo "OK"
         else
             if [[ "${pass}" -gt 2 ]]; then err "Eula sign check is looping";fi # Max allow 3 tries
-            pass=$(expr "${pass}" + 1)
+            pass=$((pass + 1))
             echo "FAIL"
             agree_eula
             check_eula
@@ -130,7 +129,7 @@ server_status() {
         eula_file="${dir}/eula.txt"
         echo_and_run --short --exit cd "${dir}" > /dev/null
         for jar in $(echo "${installed_servers}" | grep "${dir}" | sed 's,\/.*\/,,g'); do
-            if ps aux &>/dev/null | grep -P "jar.*\-jar.*${jar}" ; then
+            if pgrep "jar.*\-jar.*${jar}" &>/dev/null; then
                 srv_status="Running"
             else
                 srv_status="Not Running"
@@ -217,7 +216,7 @@ server_start() {
     echo_and_run --short --exit cd "${main_dir}/${server_version}"
 
     if screen -ls | grep "minecraft_${server_version}" &> /dev/null; then
-        err Screen session exists for that server, type \'screen -x minecraft_${server_version}\' to connect to it.
+        err "Screen session exists for that server, type 'screen -x minecraft_${server_version}' to connect to it."
     fi
 
     echo "[!] Starting server in screen as: minecraft_${server_version}"
@@ -277,11 +276,48 @@ server_stop() {
     echo "boop"
 }
 
-install_setup_sftp() {
-    # Placeholder
+sftp_checkpasswdauth() {
+    echo -n "[!]Checking if PasswordAuthentication is enabled: "
+    if grep -qP "^PasswordAuthentication [Yy][Ee][Ss]" /etc/ssh/sshd_config; then
+        echo "OK"
+        return 0
+    else
+        echo "FAIL"
+        return 1
+    fi
+}
+
+sftp_enable_password_ssh() {
+    if sftp_checkpasswdauth; then
+        return 0
+    else
+        sed -ri 's/^(#)?PasswordAuthentication [a-zA-Z]{2,3}/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+        if ! sftp_checkpasswdauth; then
+        err "Failed to set 'PasswordAuthentication yes' in /etc/ssh/sshd_config"
+        fi
+    fi
+}
+
+sftp_setup() {
+    # https://www.techrepublic.com/article/how-to-set-up-an-sftp-server-on-linux/
+    echo_and_run --short --noexit chmod 701 "${main_dir}"
+    echo_and_run --short --noexit groupadd sftp_users
+    echo_and_run --short --noexit useradd -g sftp_users -d /upload -s /sbin/nologin mc_sftp
+    echo -e "[!] SFTP Password\n# When you connect with Filezilla this is the password you will use.\n# Don't use same password as main account."
+    passwd mc_sftp
+    echo_and_run --short --noexit chown -R root:sftp_users /data/USERNAME
+    chown -R USERNAME:sftp_users /data/USERNAME/upload
+    echo -e "\n"\
+    "Match Group sftp_users\n"\
+    "ChrootDirectory /data/%u\n"\
+    "ForceCommand internal-sftp\n"\
+    "systemctl restart sshd\n" >> /etc/ssh/sshd_config
 }
 
 main() {
+    if ! [[ "${USER}" == "root" ]]; then
+        err "Requires sudo 'sudo ${0}'"
+    fi
     echo -n "[!] Verify Debian Distro: "
     if [[ $(cat /proc/version) =~ "debian"  ]]; then 
       echo "OK"
@@ -290,19 +326,19 @@ main() {
       err "Distro not found to be Debian"
     fi
 
-    echo_and_run --long --exit sudo apt-get update -y 
-    echo_and_run --long --exit sudo apt-get upgrade -y 
-    echo_and_run --long --exit sudo apt-get install -y software-properties-common 
-    echo_and_run --long --exit sudo apt-get install -y default-jre-headless 
-    echo_and_run --long --exit sudo apt-get install -y screen
-    echo_and_run --long --exit sudo apt-get install -y telnet
+    echo_and_run --long --exit apt-get update -y 
+    echo_and_run --long --exit apt-get upgrade -y 
+    echo_and_run --long --exit apt-get install -y software-properties-common 
+    echo_and_run --long --exit apt-get install -y default-jre-headless 
+    echo_and_run --long --exit apt-get install -y screen
+    echo_and_run --long --exit apt-get install -y telnet
   
     echo -n "[!] Checking if ${main_dir} directory exists: "
     if [[ -d "${main_dir}" ]]; then
         echo "OK"
     else
         echo "FAIL - creating"
-        echo_and_run --short --exit mkdir ${main_dir}
+        echo_and_run --short --exit mkdir "${main_dir}"
     fi
   
     server_versions_raw=$(curl -s https://files.minecraftforge.net/maven/net/minecraftforge/forge/index_1.1.html)
@@ -364,7 +400,7 @@ main() {
         echo_and_run --short --exit mkdir "${main_dir}/${version}/mods"
     fi
   
-    echo_and_run --short --exit cd ${main_dir}/${version}
+    echo_and_run --short --exit cd "${main_dir}/${version}"
 
     echo -n "[!] Checking if installer exists: "
     if [[ -f "${main_dir}/${version}/forge-${version}-${build}-installer.jar" ]]; then
